@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 *.csv
+*.rmarkdown
+*.md
+r_parallel_computing_tech_doc_files

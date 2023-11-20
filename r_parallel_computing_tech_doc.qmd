@@ -180,71 +180,43 @@ This kind of *embarrasingly parallel tasks* are the ones that beneficiate most o
 
 ## A little introduction to loops and maps in R (`for`, `lapply`, `map`...)
 
-### Data we will use in the following examples
-
-```{r}
-#| lst-label: lst-data-preparation-1
-#| lst-cap: "Data preparation 1. Unzipping the states data from the [USGS web](https://www.sciencebase.gov/catalog/item/64ad9c3dd34e70357a292cee)."
-#| eval: false
-
-unzip("States.zip")
-```
-
-```{r}
-#| lst-label: lst-data-preparation-2
-#| lst-cap: "Data preparation 2. Checking csv files are there."
-#| eval: true
-
-state_files <- dir(pattern = "csv")
-state_files
-```
-
 ### Loops
 
 We talk before about *embarrassingly parallel problems*, repetitive tasks that have little or not
 connection between each other more than the origin of the inputs and can be easily separated into
 parallel tasks.  
-These tasks are usually the ones we think about when we talk about `for` loops. Let's see a real
-example (@lst-loop):
+These tasks are usually the ones we think about when we talk about `for` loops. One example can
+be bootstrapping model coefficients (@lst-loop). For example, we are interested in the relationship
+between sepal length and *Iris* species (example extracted from the `doParallel` package
+vignette):
 
 ```{r}
 #| lst-label: lst-loop
-#| lst-cap: "Reading, processing and modelling all states bird counting data in a for loop"
+#| lst-cap: "Boostrapping model coefficients in iris dataset with a for loop"
 
 # libraries
-library(readr)
 library(dplyr)
 
-# other data needed
-species_dictionary <- 
-    readr::read_fwf(
-      "SpeciesList.txt", skip = 12,
-      locale = readr::locale(encoding = "latin1"),
-      show_col_types = FALSE
-    ) |>
-    dplyr::select(AOU = X2, order = X6,  common_name = X3)
-
-# loop
-state_models <- list()
-state_files <- dir(pattern = "csv")
-# for illustration purposes, we check the time used
-system.time(
-  for (state_file in state_files) {
-    # calculate the total counts for order and year for each state
-    data_transformed <-
-      readr::read_csv(state_file, show_col_types = FALSE) |>
-      # join with the species dictionary to get the common names
-      dplyr::left_join(species_dictionary, by = "AOU") |>
-      dplyr::group_by(Year, order) |>
-      dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
-    
-    state_models[[state_file]] <- lm(Counts ~ Year * order, data = data_transformed)
+# data needed
+n_repetitions <- 1e4
+res_coefs <- list()
+iris_data <- iris |>
+  dplyr::filter(Species != "setosa")
+# we measure the time for illustration purposes
+system.time({
+  for (index in 1:n_repetitions) {
+    sample_individuals <- sample(85, 85, replace = TRUE)
+    model_res <- glm(
+      iris_data[sample_individuals, "Species"] ~ iris_data[sample_individuals, "Petal.Length"],
+      family = binomial
+    )
+    res_coefs[[index]] <- coefficients(model_res)
   }
-)
+})
 ```
 
-We can see that some level of parallelization occurs, elapsed time is less than user time (CPU
-time). This is because the *hidden* parallelism we talk before (@lst-matrix).
+We can see the user time (CPU time) is roughly the same as the elapsed time (real time), as we
+should expect from a sequential `for` loop.
 
 ### lapply
 
@@ -253,40 +225,30 @@ loop in a function (@lst-lapply):
 
 ```{r}
 #| lst-label: lst-lapply
-#| lst-cap: "Caption???"
+#| lst-cap: "Boostrapping model coefficients in iris dataset with lapply"
 
 # create the function to process data from one state
-state_data_workflow <- function(filename, species_dictionary) {
-  # data trasnformation
-  results_data <- filename |>
-    readr::read_csv(show_col_types = FALSE) |>
-    # join with the species dictionary to get the common names
-    dplyr::left_join(species_dictionary, by = "AOU") |>
-    dplyr::group_by(Year, order) |>
-    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
-  # data model
-  model_data <- lm(Counts ~ Year * order, data = results_data)
-  return(model_data)
+coef_function <- function(repetition) {
+  sample_individuals <- sample(85, 85, replace = TRUE)
+  model_res <- glm(
+    iris_data[sample_individuals, "Species"] ~ iris_data[sample_individuals, "Petal.Length"],
+    family = binomial
+  )
+  return(coefficients(model_res))
 }
+# number of repetitions
+n_repetitions <- 1e4
+# data
+iris_data <- iris |>
+  dplyr::filter(Species != "setosa")
 
-# the species dictionary
-species_dictionary <- 
-    readr::read_fwf(
-      "SpeciesList.txt", skip = 12,
-      locale = readr::locale(encoding = "latin1"),
-      show_col_types = FALSE
-    ) |>
-    dplyr::select(AOU = X2, order = X6,  common_name = X3)
-# the vector with the file names
-state_files <- dir(pattern = "csv")
 # and now the lapply (we monitorize the time again for illustration purposes)
 system.time(
-  state_models <- lapply(state_files, state_data_workflow, species_dictionary)
+  res_coefs <- lapply(1:n_repetitions, coef_function)
 )
 ```
 
-As we see, the time is roughly the same as with the `for` loop, something we would expect, as the
-*hidden* parallelization occurs in the same place, inside the `glm` call.
+As we see, the time is the same as with the `for` loop, something we would expect.
 
 ### map
 
@@ -300,46 +262,32 @@ function in the `purrr` package (@lst-purrr):
 # libraries
 library(purrr)
 
-# create the function to process data from one state
-state_data_workflow <- function(filename, species_dictionary) {
-  # data trasnformation
-  results_data <- filename |>
-    readr::read_csv(show_col_types = FALSE) |>
-    # join with the species dictionary to get the common names
-    dplyr::left_join(species_dictionary, by = "AOU") |>
-    dplyr::group_by(Year, order) |>
-    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
-  # data model
-  model_data <- lm(Counts ~ Year * order, data = results_data)
-  return(model_data)
-}
-
-# the species dictionary
-species_dictionary <- 
-    readr::read_fwf(
-      "SpeciesList.txt", skip = 12,
-      locale = readr::locale(encoding = "latin1"),
-      show_col_types = FALSE
-    ) |>
-    dplyr::select(AOU = X2, order = X6,  common_name = X3)
-# the vector with the file names
-state_files <- dir(pattern = "csv")
-# and now the map (we monitorize the time again for illustration purposes)
-system.time(
-  state_models <- purrr::map(
-    state_files,
-    .f = state_data_workflow,
-    species_dictionary = species_dictionary
+coef_function <- function(repetition) {
+  sample_individuals <- sample(85, 85, replace = TRUE)
+  model_res <- glm(
+    iris_data[sample_individuals, "Species"] ~ iris_data[sample_individuals, "Petal.Length"],
+    family = binomial
   )
-)
+  return(coefficients(model_res))
+}
+# number of repetitions
+n_repetitions <- 1e4
+# data
+iris_data <- iris |>
+  dplyr::filter(Species != "setosa")
+
+# and now the map (we monitorize the time again for illustration purposes)
+system.time({
+  res_coefs <- purrr::map(1:n_repetitions, .f = coef_function)
+})
 ```
 
-Again times are similar with the other workflows.
+Again times are similar to the other workflows.
 
 ## Ways to use parallelization in your code (`parallel`, `furrr`...)
 
-If we can use loops, applys or maps, then we can parallelize without any problem. In this section
-we will see the different options we can do it.
+If we can use loops, `lapply` or `map`, then we can parallelize without any problem. In this
+section we will see the different options we can do it.
 
 ### Preparations
 
@@ -350,6 +298,8 @@ are:
 ```{r}
 #| lst-label: lst-detectCores
 #| lst-cap: "Numer of cores available"
+
+library(parallel)
 parallel::detectCores()
 ```
 
@@ -372,38 +322,33 @@ library(parallel)
 library(foreach)
 library(doParallel)
 
-# other data needed
-species_dictionary <-
-    readr::read_fwf(
-      "SpeciesList.txt", skip = 12,
-      locale = readr::locale(encoding = "latin1"),
-      show_col_types = FALSE
-    ) |>
-    dplyr::select(AOU = X2, order = X6,  common_name = X3)
+# data needed
+n_repetitions <- 1e4
+res_coefs <- list()
+iris_data <- iris |>
+  dplyr::filter(Species != "setosa")
 
-state_files <- dir(pattern = "csv")
 # set the number of cores to use, in this example 4
 doParallel::registerDoParallel(cores = 4)
+
 # foreach loop (for illustration purposes, we check the time used)
 system.time(
-  {state_models <- foreach::foreach(state_file = state_files) %dopar% {
-    # calculate the total counts for order and year for each state
-    data_transformed <-
-      readr::read_csv(state_file, show_col_types = FALSE) |>
-      # join with the species dictionary to get the common names
-      dplyr::left_join(species_dictionary, by = "AOU") |>
-      dplyr::group_by(Year, order) |>
-      dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
-
-    lm(Counts ~ Year * order, data = data_transformed)
+  {res_coefs <- foreach::foreach(index = 1:n_repetitions) %dopar% {
+    sample_individuals <- sample(85, 85, replace = TRUE)
+    model_res <- glm(
+      iris_data[sample_individuals, "Species"] ~ iris_data[sample_individuals, "Petal.Length"],
+      family = binomial
+    )
+    coefficients(model_res)
   }}
 )
 stopImplicitCluster()
 ```
 
-As we can see, time has reduced almost to a half when compared with processing the files sequentially. We
-are using 4 cores, so we probably expected a reduction in time of $1/4$. But as we said previously,
-starting the 4 extra processes, sending the data and retrieving the results takes time.
+As we can see, time has reduced almost four times when compared with processing the files
+sequentially. We are really close to the ideal $1/4$ reduction in time we should expect from using
+4 cores, but not quite as starting the extra R processes, sending the data and retrieving the
+results takes time. With bigger datasets we can see that elapsed time increases.
 
 ### `mclapply`
 
@@ -414,39 +359,28 @@ If we prefer the `lapply` syntax, we can use `mclapply` to run the same expressi
 #| lst-label: lst-mclapply
 #| lst-cap: "Caption???"
 
-library(parallel)
-
 # create the function to process data from one state
-state_data_workflow <- function(filename, species_dictionary) {
-  # data trasnformation
-  results_data <- filename |>
-    readr::read_csv(show_col_types = FALSE) |>
-    # join with the species dictionary to get the common names
-    dplyr::left_join(species_dictionary, by = "AOU") |>
-    dplyr::group_by(Year, order) |>
-    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
-  # data model
-  model_data <- lm(Counts ~ Year * order, data = results_data)
-  return(model_data)
+coef_function <- function(repetition) {
+  sample_individuals <- sample(85, 85, replace = TRUE)
+  model_res <- glm(
+    iris_data[sample_individuals, "Species"] ~ iris_data[sample_individuals, "Petal.Length"],
+    family = binomial
+  )
+  return(coefficients(model_res))
 }
+# number of repetitions
+n_repetitions <- 1e4
+# data
+iris_data <- iris |>
+  dplyr::filter(Species != "setosa")
 
-# the species dictionary
-species_dictionary <- 
-    readr::read_fwf(
-      "SpeciesList.txt", skip = 12,
-      locale = readr::locale(encoding = "latin1"),
-      show_col_types = FALSE
-    ) |>
-    dplyr::select(AOU = X2, order = X6,  common_name = X3)
-# the vector with the file names
-state_files <- dir(pattern = "csv")
 # and now the lapply (we monitorize the time again for illustration purposes)
-system.time(
-  state_models <- mclapply(state_files, state_data_workflow, species_dictionary, mc.cores = 4)
-)
+system.time({
+  res_coefs <- mclapply(1:n_repetitions, coef_function, mc.cores = 4)
+})
 ```
 
-We see again th same reduction in time with `mclapply`.
+We see again the time reduction in time with `mclapply`.
 
 ### `future_map`
 
@@ -456,50 +390,46 @@ run the `map` example above in parallel (@lst-furrr):
 ```{r}
 #| lst-label: lst-furrr
 #| lst-cap: "Caption???"
+#| warning: false
 
 # libraries
 library(future)
 library(furrr)
 
-# create the function to process data from one state
-state_data_workflow <- function(filename, species_dictionary) {
-  # data trasnformation
-  results_data <- filename |>
-    readr::read_csv(show_col_types = FALSE) |>
-    # join with the species dictionary to get the common names
-    dplyr::left_join(species_dictionary, by = "AOU") |>
-    dplyr::group_by(Year, order) |>
-    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
-  # data model
-  model_data <- lm(Counts ~ Year * order, data = results_data)
-  return(model_data)
+coef_function <- function(repetition) {
+  sample_individuals <- sample(85, 85, replace = TRUE)
+  model_res <- glm(
+    iris_data[sample_individuals, "Species"] ~ iris_data[sample_individuals, "Petal.Length"],
+    family = binomial
+  )
+  return(coefficients(model_res))
 }
+# number of repetitions
+n_repetitions <- 1e4
+# data
+iris_data <- iris |>
+  dplyr::filter(Species != "setosa")
 
-# the species dictionary
-species_dictionary <- 
-    readr::read_fwf(
-      "SpeciesList.txt", skip = 12,
-      locale = readr::locale(encoding = "latin1"),
-      show_col_types = FALSE
-    ) |>
-    dplyr::select(AOU = X2, order = X6,  common_name = X3)
-# the vector with the file names
-state_files <- dir(pattern = "csv")
 # setting core options
 future::plan(future.callr::callr, workers = 4)
+
 # and now the map (we monitorize the time again for illustration purposes)
-system.time(
-  state_models <- furrr::future_map(
-    state_files,
-    .f = state_data_workflow,
-    species_dictionary = species_dictionary
-  )
-)
+system.time({
+  state_models <- furrr::future_map(1:n_repetitions, .f = coef_function)
+})
 ```
 
-This is the method that returns the worst time in parallel (but better than sequential). This is
-because `future_map` works setting a more complete environment in the parallelized processes that
-takes more time. In a small dataset like the one we are using there is no advantage in using this
-aproach (besides using the `tidyverse` syntax), but if instead of 50 files we were processing 1e6
-files, then this workflow start to shine.
+This is the method that returns the worst time running in parallel (but better than sequential).
+This is because `future_map` works setting a more complete environment in the parallelized
+processes that takes more time. In larger datasets and more complex functions, `future_map` is a
+good option for paralellization.
 
+::: {.callout-tip}
+Calculating bootstrapped coefficients is a toy example for illustration purposes. There are R
+packages that can bootstrap in more efficient ways, including parallelization already included,
+like the [`boot` package](https://cran.r-project.org/package=boot).
+:::
+
+## A real example
+
+Now that we have an idea of what takes to carry on repetitive tasks in parallel, we can see
