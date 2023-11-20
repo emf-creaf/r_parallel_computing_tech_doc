@@ -1,0 +1,505 @@
+---
+title: "Parallel computation in R"
+author:
+  - vgranda
+  - emf
+date: "2023-09-04"
+date_lastmod: "2023-09-04"
+format: hugo-md
+editor_options: 
+  chunk_output_type: console
+---
+
+## Introduction
+
+This document will explain the basic concepts of parallel computing in R, with code examples to illustrate the concepts presented here. The topics covered includes:
+
+-   What is parallel computing?\
+-   When can we use it?\
+-   A little introduction to loops and maps in R (`for`, `lapply`, `map`...)\
+-   Ways to use parallelization in your code (`parallel`, `furrr`...)\
+-   How to check if is worth the hassle\
+-   Practical examples
+
+## What is parallel computing?
+
+```{dot}
+//| label: fig-cpu
+//| fig-cap: "Modern CPU and cores"
+digraph G {
+  edge [style=invis];
+  subgraph cluster_cpu1 {
+    node [shape=Msquare,style=filled,color=white];
+    style=filled;
+    color=lightgrey;
+    core2; core1; core4; core3;
+    label = "CPU #1";
+  }
+  subgraph cluster_cpu2 {
+    node [shape=Msquare,style=filled,color=white];
+    style=filled;
+    color=lightgrey;
+    core6; core5; core8; core7;
+    label = "CPU #2";
+  }
+  core1 -> core3; core2 -> core4;
+  core5 -> core7; core6 -> core8;
+}
+```
+
+First of all we need to understand a little about CPUs (Central Processing Unit) and cores.
+Modern computers (@fig-cpu) have multiple CPUs, and those can have one or multiple cores. Each core
+is responsible of running individual processes.  
+
+Think of a simple algebraic operation, adding two numbers (`1 + 1`). In a nutshell, that operation
+is translated to machine code and a process is started in one core to perform the operation
+(@fig-sum).
+
+```{dot}
+//| label: fig-sum
+//| fig-cap: "One core is performing the '1 +1' operation. This leaves the other cores available to concurrently start other procesess"
+digraph G {
+  edge [style=invis];
+  subgraph cluster_cpu1 {
+    node [shape=Msquare,style=filled,color=green, label="Available\n core"];
+    style=filled;
+    color=lightgrey;
+    core2; core1; core4; core3 [shape=Msquare,style=filled,color=red, label="'1 + 1'\nprocess running"];
+    label = "CPU #1";
+  }
+  subgraph cluster_cpu2 {
+    node [shape=Msquare,style=filled,color=green, label="Available\n core"];
+    style=filled;
+    color=lightgrey;
+    core6; core5; core8; core7;
+    label = "CPU #2";
+  }
+  core1 -> core3; core2 -> core4;
+  core5 -> core7; core6 -> core8;
+}
+```
+
+So CPU cores can be used to run the the same process with different data in parallel to speed up
+long tasks. **In theory**, this can make things $1/n_{cores}$ faster, but in reality, other factors
+must be added (time consumed transferring data to each process, time consumed gathering results
+from different processes and jion them, time consumed spawning new processes...) so the time
+gain highly depends on the type of operations, data types used...
+
+::: {.callout-note}
+In fact, some workflows are slower when parallelized, so we always need to check if we are really
+saving time and effort.
+:::
+
+#### R is a single process software
+
+`R` is designed to run in only one CPU process. This is due to the time when `S` (`R` predecessor)
+and `R` were developed, where CPUs had mostly one core and multitasking and parallel computation
+were still not widely available or technologies were still undeveloped.
+
+Given the `R` limitations explained before, parallel computing in `R` is not available
+*out-of-the-box*. We will need to use extra packages/libraries and we can only use it in
+specific cases and data types.
+
+## When can we use it?
+
+You have been using parallel computing in `R` without knowing it. A lot of `R` base functions are
+calls to methods written in languages that support multitasking (`C++`, `Rust`...). For example,
+matrix operations and other linear algebra functions (common operations when calculating
+regression coefficients when using `lm` and other model functions) are calls to `C++` methods that
+are parallelized and use the CPU cores available in your system (@lst-matrix)
+
+```{r}
+#| lst-label: lst-matrix
+#| lst-cap: "Time consumed by matrix operations. We can see that the user time is bigger than the elapsed time. This means that the task (matrix product) was parallelized consuming more CPU time (user), but less real time (elapsed)"
+observations <- matrix(rnorm(1e6 * 100), 1e6, 100)
+predictions <- rnorm(100)
+system.time(outcome <- drop(observations %*% predictions) + rnorm(1e6))
+```
+
+::: {.callout-note}
+Some other `R` packages have implemented the methods we'll explain in the following sections and
+offer arguments to the user to choose if and how parallelization must be done. For example, `boot`
+package offer parallelization options when bootstrapping model coefficients.
+:::
+
+### Working with embarrassingly parallel problems
+
+*[Embarrassingly parallel problems](https://en.wikipedia.org/wiki/Embarrassingly_parallel)*
+are those where we can easily separate the problem into several parallel tasks
+^[Also known as *perfectly parallel*, *delightfully parallel* or *pleasingly parallel* problems,
+but those names don't have that ring on it]. This kind of problems are very usual
+in scientific and statistics fields and. Think of the classic data analysis 
+(@fig-daworkflow).
+
+```{mermaid}
+%%| label: fig-daworkflow
+%%| fig-cap: "Classic data analysis workflow"
+%%{init: {"flowchart": {"htmlLabels": false, "defaultRenderer": "dagre"}} }%%
+flowchart LR
+  subgraph single[Process 1]
+    direction LR
+    read[Read file] --> process[Transform data] --> model[Model data] --> visualize[Visualize results]
+  end
+  single -->|"`Repeat after
+  we finish
+  with a file`"| single
+```
+
+In it, we need to ingest the data, processing it to clean/transform/... it, modelling the data and
+finally visualize/store the results. Now imagine we have to repeat the same process for hundred or
+thousands of data files (*i.e.*, remote sensing images, genomic analyses, historical and
+projections climatic analyses...). Instead of processing each task one after another (the classic
+`R` way) we can divide the input (names of the files to read) in chunks and send each chunk to CPU
+processes that run in parallel, which can save a lot of time and effort (@fig-daworflowpar).
+
+```{mermaid}
+%%| label: fig-daworflowpar
+%%| fig-cap: "Same data analysis workflow as before but running in parallel, each process in a different CPU core"
+%%{init: {"flowchart": {"htmlLabels": false, "defaultRenderer": "dagre"}} }%%
+flowchart LR
+  subgraph one[Process 1]
+    direction LR
+    read[Read file] --> process[Transform data] --> model[Model data] --> visualize[Visualize results]
+  end
+  subgraph two[Process 2]
+    direction LR
+    read_2[Read file] --> process_2[Transform data] --> model_2[Model data] --> visualize_2[Visualize results]
+  end
+  subgraph three[Process 3]
+    direction LR
+    read_n[Read file] --> process_n[Transform data] --> model_n[Model data] --> visualize_n[Visualize results]
+  end
+  file_name[File names] --> one & two & three
+  one --> one_finish[done]
+  two --> two_finish[done]
+  three --> three_finish[done]
+```
+
+
+This kind of *embarrasingly parallel tasks* are the ones that beneficiate most of parallelization.
+
+## A little introduction to loops and maps in R (`for`, `lapply`, `map`...)
+
+### Data we will use in the following examples
+
+```{r}
+#| lst-label: lst-data-preparation-1
+#| lst-cap: "Data preparation 1. Unzipping the states data from the [USGS web](https://www.sciencebase.gov/catalog/item/64ad9c3dd34e70357a292cee)."
+#| eval: false
+
+unzip("States.zip")
+```
+
+```{r}
+#| lst-label: lst-data-preparation-2
+#| lst-cap: "Data preparation 2. Checking csv files are there."
+#| eval: true
+
+state_files <- dir(pattern = "csv")
+state_files
+```
+
+### Loops
+
+We talk before about *embarrassingly parallel problems*, repetitive tasks that have little or not
+connection between each other more than the origin of the inputs and can be easily separated into
+parallel tasks.  
+These tasks are usually the ones we think about when we talk about `for` loops. Let's see a real
+example (@lst-loop):
+
+```{r}
+#| lst-label: lst-loop
+#| lst-cap: "Reading, processing and modelling all states bird counting data in a for loop"
+
+# libraries
+library(readr)
+library(dplyr)
+
+# other data needed
+species_dictionary <- 
+    readr::read_fwf(
+      "SpeciesList.txt", skip = 12,
+      locale = readr::locale(encoding = "latin1"),
+      show_col_types = FALSE
+    ) |>
+    dplyr::select(AOU = X2, order = X6,  common_name = X3)
+
+# loop
+state_models <- list()
+state_files <- dir(pattern = "csv")
+# for illustration purposes, we check the time used
+system.time(
+  for (state_file in state_files) {
+    # calculate the total counts for order and year for each state
+    data_transformed <-
+      readr::read_csv(state_file, show_col_types = FALSE) |>
+      # join with the species dictionary to get the common names
+      dplyr::left_join(species_dictionary, by = "AOU") |>
+      dplyr::group_by(Year, order) |>
+      dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
+    
+    state_models[[state_file]] <- lm(Counts ~ Year * order, data = data_transformed)
+  }
+)
+```
+
+We can see that some level of parallelization occurs, elapsed time is less than user time (CPU
+time). This is because the *hidden* parallelism we talk before (@lst-matrix).
+
+### lapply
+
+The same problem can be solved with `lapply`, but we need to encapsulate the logic of the `for`
+loop in a function (@lst-lapply):
+
+```{r}
+#| lst-label: lst-lapply
+#| lst-cap: "Caption???"
+
+# create the function to process data from one state
+state_data_workflow <- function(filename, species_dictionary) {
+  # data trasnformation
+  results_data <- filename |>
+    readr::read_csv(show_col_types = FALSE) |>
+    # join with the species dictionary to get the common names
+    dplyr::left_join(species_dictionary, by = "AOU") |>
+    dplyr::group_by(Year, order) |>
+    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
+  # data model
+  model_data <- lm(Counts ~ Year * order, data = results_data)
+  return(model_data)
+}
+
+# the species dictionary
+species_dictionary <- 
+    readr::read_fwf(
+      "SpeciesList.txt", skip = 12,
+      locale = readr::locale(encoding = "latin1"),
+      show_col_types = FALSE
+    ) |>
+    dplyr::select(AOU = X2, order = X6,  common_name = X3)
+# the vector with the file names
+state_files <- dir(pattern = "csv")
+# and now the lapply (we monitorize the time again for illustration purposes)
+system.time(
+  state_models <- lapply(state_files, state_data_workflow, species_dictionary)
+)
+```
+
+As we see, the time is roughly the same as with the `for` loop, something we would expect, as the
+*hidden* parallelization occurs in the same place, inside the `glm` call.
+
+### map
+
+If using [`tidyverse` packages](https://www.tidyverse.org/), instead of `lapply` we will use `map`
+function in the `purrr` package (@lst-purrr):
+
+```{r}
+#| lst-label: lst-purrr
+#| lst-cap: "Caption???"
+
+# libraries
+library(purrr)
+
+# create the function to process data from one state
+state_data_workflow <- function(filename, species_dictionary) {
+  # data trasnformation
+  results_data <- filename |>
+    readr::read_csv(show_col_types = FALSE) |>
+    # join with the species dictionary to get the common names
+    dplyr::left_join(species_dictionary, by = "AOU") |>
+    dplyr::group_by(Year, order) |>
+    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
+  # data model
+  model_data <- lm(Counts ~ Year * order, data = results_data)
+  return(model_data)
+}
+
+# the species dictionary
+species_dictionary <- 
+    readr::read_fwf(
+      "SpeciesList.txt", skip = 12,
+      locale = readr::locale(encoding = "latin1"),
+      show_col_types = FALSE
+    ) |>
+    dplyr::select(AOU = X2, order = X6,  common_name = X3)
+# the vector with the file names
+state_files <- dir(pattern = "csv")
+# and now the map (we monitorize the time again for illustration purposes)
+system.time(
+  state_models <- purrr::map(
+    state_files,
+    .f = state_data_workflow,
+    species_dictionary = species_dictionary
+  )
+)
+```
+
+Again times are similar with the other workflows.
+
+## Ways to use parallelization in your code (`parallel`, `furrr`...)
+
+If we can use loops, applys or maps, then we can parallelize without any problem. In this section
+we will see the different options we can do it.
+
+### Preparations
+
+Before we start, we need to know how many cores are available in our system. This can be done
+with `parallel::detectCores()`. In the system this document has been created the available cores
+are:
+
+```{r}
+#| lst-label: lst-detectCores
+#| lst-cap: "Numer of cores available"
+parallel::detectCores()
+```
+
+::: {.callout-tip}
+In the following examples we will be using 4 cores, but if your system has less than that, please
+change it to a valid number.
+:::
+
+### `foreach` and `doParallel`
+
+In a very similar way to a `for` loop we can use the `foreach` and `doParallel` packages to build
+a loop that will run the files in paralell (@lst-foreach):
+
+```{r}
+#| lst-label: lst-foreach
+#| lst-cap: "Reading, processing and modelling all states bird counting data in a for loop"
+
+# libraries
+library(parallel)
+library(foreach)
+library(doParallel)
+
+# other data needed
+species_dictionary <-
+    readr::read_fwf(
+      "SpeciesList.txt", skip = 12,
+      locale = readr::locale(encoding = "latin1"),
+      show_col_types = FALSE
+    ) |>
+    dplyr::select(AOU = X2, order = X6,  common_name = X3)
+
+state_files <- dir(pattern = "csv")
+# set the number of cores to use, in this example 4
+doParallel::registerDoParallel(cores = 4)
+# foreach loop (for illustration purposes, we check the time used)
+system.time(
+  {state_models <- foreach::foreach(state_file = state_files) %dopar% {
+    # calculate the total counts for order and year for each state
+    data_transformed <-
+      readr::read_csv(state_file, show_col_types = FALSE) |>
+      # join with the species dictionary to get the common names
+      dplyr::left_join(species_dictionary, by = "AOU") |>
+      dplyr::group_by(Year, order) |>
+      dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
+
+    lm(Counts ~ Year * order, data = data_transformed)
+  }}
+)
+stopImplicitCluster()
+```
+
+As we can see, time has reduced almost to a half when compared with processing the files sequentially. We
+are using 4 cores, so we probably expected a reduction in time of $1/4$. But as we said previously,
+starting the 4 extra processes, sending the data and retrieving the results takes time.
+
+### `mclapply`
+
+If we prefer the `lapply` syntax, we can use `mclapply` to run the same expression concurrently.
+`mclapply` belongs to the `parallel` pacakge and works exactly the same as lapply (@lst-mclapply):
+
+```{r}
+#| lst-label: lst-mclapply
+#| lst-cap: "Caption???"
+
+library(parallel)
+
+# create the function to process data from one state
+state_data_workflow <- function(filename, species_dictionary) {
+  # data trasnformation
+  results_data <- filename |>
+    readr::read_csv(show_col_types = FALSE) |>
+    # join with the species dictionary to get the common names
+    dplyr::left_join(species_dictionary, by = "AOU") |>
+    dplyr::group_by(Year, order) |>
+    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
+  # data model
+  model_data <- lm(Counts ~ Year * order, data = results_data)
+  return(model_data)
+}
+
+# the species dictionary
+species_dictionary <- 
+    readr::read_fwf(
+      "SpeciesList.txt", skip = 12,
+      locale = readr::locale(encoding = "latin1"),
+      show_col_types = FALSE
+    ) |>
+    dplyr::select(AOU = X2, order = X6,  common_name = X3)
+# the vector with the file names
+state_files <- dir(pattern = "csv")
+# and now the lapply (we monitorize the time again for illustration purposes)
+system.time(
+  state_models <- mclapply(state_files, state_data_workflow, species_dictionary, mc.cores = 4)
+)
+```
+
+We see again th same reduction in time with `mclapply`.
+
+### `future_map`
+
+`furrr` package offers parallelized versions of `purrr::map` family of functions. We can use it to
+run the `map` example above in parallel (@lst-furrr):
+
+```{r}
+#| lst-label: lst-furrr
+#| lst-cap: "Caption???"
+
+# libraries
+library(future)
+library(furrr)
+
+# create the function to process data from one state
+state_data_workflow <- function(filename, species_dictionary) {
+  # data trasnformation
+  results_data <- filename |>
+    readr::read_csv(show_col_types = FALSE) |>
+    # join with the species dictionary to get the common names
+    dplyr::left_join(species_dictionary, by = "AOU") |>
+    dplyr::group_by(Year, order) |>
+    dplyr::summarise(Counts = sum(StopTotal), .groups = "drop")
+  # data model
+  model_data <- lm(Counts ~ Year * order, data = results_data)
+  return(model_data)
+}
+
+# the species dictionary
+species_dictionary <- 
+    readr::read_fwf(
+      "SpeciesList.txt", skip = 12,
+      locale = readr::locale(encoding = "latin1"),
+      show_col_types = FALSE
+    ) |>
+    dplyr::select(AOU = X2, order = X6,  common_name = X3)
+# the vector with the file names
+state_files <- dir(pattern = "csv")
+# setting core options
+future::plan(future.callr::callr, workers = 4)
+# and now the map (we monitorize the time again for illustration purposes)
+system.time(
+  state_models <- furrr::future_map(
+    state_files,
+    .f = state_data_workflow,
+    species_dictionary = species_dictionary
+  )
+)
+```
+
+This is the method that returns the worst time in parallel (but better than sequential). This is
+because `future_map` works setting a more complete environment in the parallelized processes that
+takes more time. In a small dataset like the one we are using there is no advantage in using this
+aproach (besides using the `tidyverse` syntax), but if instead of 50 files we were processing 1e6
+files, then this workflow start to shine.
+
