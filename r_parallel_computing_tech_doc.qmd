@@ -5,7 +5,7 @@ author:
   - emf
 date: "2023-09-04"
 date_lastmod: "2023-09-04"
-format: html
+format: hugo-md
 editor_options: 
   chunk_output_type: console
 ---

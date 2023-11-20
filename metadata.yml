@@ -1,9 +1,9 @@
-id: 'r_parallelization'
+id: 'r_parallel_computing_tech_doc'
 emf_type: tech_doc
 emf_public: true
 emf_automatized: true
 emf_reproducible: true
-emf_draft: true
+emf_draft: false
 emf_data_type: emf_data_product
 data_repository: ''
 model_repository: ''
@@ -21,7 +21,7 @@ links:
   url_pdf: ''
   url_doi: ''
   url_docs: ''
-  url_source: ''
+  url_source: 'https://github.com/emf-creaf/r_parallel_computing_tech_doc'
 requirements: ''
 description: This technical document explain with examples R code parallelization.
 date: '2023-11-20'
