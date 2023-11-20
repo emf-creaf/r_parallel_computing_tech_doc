@@ -1,0 +1,28 @@
+id: 'r_parallelization'
+emf_type: tech_doc
+emf_public: true
+emf_automatized: true
+emf_reproducible: true
+emf_draft: true
+emf_data_type: emf_data_product
+data_repository: ''
+model_repository: ''
+nodes: ''
+authors:
+- vgranda
+- mcaceres
+- rmolowny
+- atovar
+tags:
+- R
+- parallelization
+- programming
+links:
+  url_pdf: ''
+  url_doi: ''
+  url_docs: ''
+  url_source: ''
+requirements: ''
+description: This technical document explain with examples R code parallelization.
+date: '2023-11-20'
+date_lastmod: '2023-11-20'

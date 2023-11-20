@@ -5,7 +5,7 @@ author:
   - emf
 date: "2023-09-04"
 date_lastmod: "2023-09-04"
-format: hugo-md
+format: html
 editor_options: 
   chunk_output_type: console
 ---
@@ -193,6 +193,7 @@ vignette):
 ```{r}
 #| lst-label: lst-loop
 #| lst-cap: "Boostrapping model coefficients in iris dataset with a for loop"
+#| warning: false
 
 # libraries
 library(dplyr)
@@ -226,6 +227,7 @@ loop in a function (@lst-lapply):
 ```{r}
 #| lst-label: lst-lapply
 #| lst-cap: "Boostrapping model coefficients in iris dataset with lapply"
+#| warning: false
 
 # create the function to process data from one state
 coef_function <- function(repetition) {
@@ -258,6 +260,7 @@ function in the `purrr` package (@lst-purrr):
 ```{r}
 #| lst-label: lst-purrr
 #| lst-cap: "Caption???"
+#| warning: false
 
 # libraries
 library(purrr)
@@ -316,6 +319,7 @@ a loop that will run the files in paralell (@lst-foreach):
 ```{r}
 #| lst-label: lst-foreach
 #| lst-cap: "Reading, processing and modelling all states bird counting data in a for loop"
+#| warning: false
 
 # libraries
 library(parallel)
@@ -358,6 +362,7 @@ If we prefer the `lapply` syntax, we can use `mclapply` to run the same expressi
 ```{r}
 #| lst-label: lst-mclapply
 #| lst-cap: "Caption???"
+#| warning: false
 
 # create the function to process data from one state
 coef_function <- function(repetition) {
@@ -432,4 +437,7 @@ like the [`boot` package](https://cran.r-project.org/package=boot).
 
 ## A real example
 
-Now that we have an idea of what takes to carry on repetitive tasks in parallel, we can see
+Now that we have an idea of what takes to carry on repetitive tasks in parallel, we can see a
+*real life* example:
+
+**TODO**

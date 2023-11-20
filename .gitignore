@@ -5,4 +5,5 @@
 *.csv
 *.rmarkdown
 *.md
+*.html
 r_parallel_computing_tech_doc_files
