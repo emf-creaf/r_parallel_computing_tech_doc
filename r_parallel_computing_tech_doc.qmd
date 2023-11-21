@@ -12,7 +12,7 @@ editor_options:
 
 ## Introduction
 
-This document will explain the basic concepts of parallel computing in R, with code examples to illustrate the concepts presented here. The topics covered includes:
+This document will explain the basic concepts of parallel computing in R, with code examples to illustrate the concepts presented here. The topics covered include:
 
 -   What is parallel computing?\
 -   When can we use it?\
@@ -82,7 +82,7 @@ digraph G {
 So CPU cores can be used to run the the same process with different data in parallel to speed up
 long tasks. **In theory**, this can make things $1/n_{cores}$ faster, but in reality, other factors
 must be added (time consumed transferring data to each process, time consumed gathering results
-from different processes and jion them, time consumed spawning new processes...) so the time
+from different processes and join them, time consumed spawning new processes...) so the time
 gain highly depends on the type of operations, data types used...
 
 ::: {.callout-note}
@@ -145,7 +145,7 @@ flowchart LR
   with a file`"| single
 ```
 
-In it, we need to ingest the data, processing it to clean/transform/... it, modelling the data and
+In this process, we need to ingest the data, processing it to clean/transform/... it, modelling the data and
 finally visualize/store the results. Now imagine we have to repeat the same process for hundred or
 thousands of data files (*i.e.*, remote sensing images, genomic analyses, historical and
 projections climatic analyses...). Instead of processing each task one after another (the classic
@@ -351,8 +351,8 @@ stopImplicitCluster()
 
 As we can see, time has reduced almost four times when compared with processing the files
 sequentially. We are really close to the ideal $1/4$ reduction in time we should expect from using
-4 cores, but not quite as starting the extra R processes, sending the data and retrieving the
-results takes time. With bigger datasets we can see that elapsed time increases.
+4 cores, but not quite, as starting the extra R processes, sending the data and retrieving the
+results takes some time. With bigger datasets we can see that elapsed time increases because of this communication overload.
 
 ### `mclapply`
 
