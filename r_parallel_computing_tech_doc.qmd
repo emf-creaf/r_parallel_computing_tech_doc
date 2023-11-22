@@ -5,7 +5,11 @@ author:
   - emf
 date: "2023-09-04"
 date_lastmod: "2023-09-04"
-format: hugo-md
+format:
+  hugo-md:
+    mermaid-format: svg
+    keep-yaml: false
+    preserve-yaml: false
 editor_options: 
   chunk_output_type: console
 ---
