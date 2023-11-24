@@ -10,13 +10,17 @@ format:
     mermaid-format: svg
     keep-yaml: false
     preserve-yaml: false
+knitr:
+  opts_chunk: 
+    collapse: true
 editor_options: 
   chunk_output_type: console
 ---
 
 ## Introduction
 
-This document will explain the basic concepts of parallel computing in R, with code examples to illustrate the concepts presented here. The topics covered include:
+This document will explain the basic concepts of parallel computing in R, with code examples to
+illustrate the concepts presented here. The topics covered include:
 
 -   What is parallel computing?\
 -   When can we use it?\
@@ -90,8 +94,8 @@ from different processes and join them, time consumed spawning new processes...)
 gain highly depends on the type of operations, data types used...
 
 ::: {.callout-note}
-In fact, some workflows are slower when parallelized, so we always need to check if we are really
-saving time and effort.
+In fact, sometimes workflows are slower when parallelized, so we always need to check if we are really
+saving time and effort. See [below](#hassle) for more information on this.
 :::
 
 #### R is a single process software
@@ -132,7 +136,7 @@ package offer parallelization options when bootstrapping model coefficients.
 are those where we can easily separate the problem into several parallel tasks
 ^[Also known as *perfectly parallel*, *delightfully parallel* or *pleasingly parallel* problems,
 but those names don't have that ring on it]. This kind of problems are very usual
-in scientific and statistics fields and. Think of the classic data analysis 
+in scientific and statistics fields. Think of the classic data analysis showed below
 (@fig-daworkflow).
 
 ```{mermaid}
@@ -149,12 +153,12 @@ flowchart LR
   with a file`"| single
 ```
 
-In this process, we need to ingest the data, processing it to clean/transform/... it, modelling the data and
-finally visualize/store the results. Now imagine we have to repeat the same process for hundred or
-thousands of data files (*i.e.*, remote sensing images, genomic analyses, historical and
-projections climatic analyses...). Instead of processing each task one after another (the classic
-`R` way) we can divide the input (names of the files to read) in chunks and send each chunk to CPU
-processes that run in parallel, which can save a lot of time and effort (@fig-daworflowpar).
+In this process, we need to ingest the data, processing it to clean/transform/... it, modelling
+the data and finally visualize/store the results. Now imagine we have to repeat the same process for
+hundred or thousands of data files (*i.e.*, remote sensing images, genomic analyses, historical and 
+projections climatic analyses...). Instead of processing each task one after another (in a
+sequential way) we can divide the input (names of the files to read) in chunks and send each chunk
+to CPU processes that run in parallel, which can save a lot of time and effort (@fig-daworflowpar).
 
 ```{mermaid}
 %%| label: fig-daworflowpar
@@ -263,7 +267,7 @@ function in the `purrr` package (@lst-purrr):
 
 ```{r}
 #| lst-label: lst-purrr
-#| lst-cap: "Caption???"
+#| lst-cap: "Boostrapping model coefficients in iris dataset with map"
 #| warning: false
 
 # libraries
@@ -322,8 +326,9 @@ a loop that will run the files in paralell (@lst-foreach):
 
 ```{r}
 #| lst-label: lst-foreach
-#| lst-cap: "Reading, processing and modelling all states bird counting data in a for loop"
+#| lst-cap: "Boostrapping model coefficients in iris dataset in parallel with a foreach"
 #| warning: false
+#| collapse: true
 
 # libraries
 library(parallel)
@@ -350,13 +355,19 @@ system.time(
     coefficients(model_res)
   }}
 )
-stopImplicitCluster()
 ```
 
 As we can see, time has reduced almost four times when compared with processing the files
 sequentially. We are really close to the ideal $1/4$ reduction in time we should expect from using
 4 cores, but not quite, as starting the extra R processes, sending the data and retrieving the
 results takes some time. With bigger datasets we can see that elapsed time increases because of this communication overload.
+
+```{r}
+#| include: false
+
+# Stop the cluster
+stopImplicitCluster()
+```
 
 ### `mclapply`
 
@@ -365,7 +376,7 @@ If we prefer the `lapply` syntax, we can use `mclapply` to run the same expressi
 
 ```{r}
 #| lst-label: lst-mclapply
-#| lst-cap: "Caption???"
+#| lst-cap: "Boostrapping model coefficients in iris dataset in parallel with a mclapply"
 #| warning: false
 
 # create the function to process data from one state
@@ -398,7 +409,7 @@ run the `map` example above in parallel (@lst-furrr):
 
 ```{r}
 #| lst-label: lst-furrr
-#| lst-cap: "Caption???"
+#| lst-cap: "Boostrapping model coefficients in iris dataset in parallel with a furrr"
 #| warning: false
 
 # libraries
@@ -438,6 +449,30 @@ Calculating bootstrapped coefficients is a toy example for illustration purposes
 packages that can bootstrap in more efficient ways, including parallelization already included,
 like the [`boot` package](https://cran.r-project.org/package=boot).
 :::
+
+## How to check if parallelization is worthy the hassle {#hassle}
+
+We have been using `system.time` to check the time our code takes to run. This is one way of
+check if the benefit of parallelization outweighs the inconvenience of setting it up. Other ways
+include using other benchmarking libraries, like `bench` or `rbenchmark`. Their documentation
+explain everything you need to know about timing code.
+
+In any case, as a rule of thumb, parallelization is not worthy in the following scenarios:
+
+  1. We are parallelizing *fast* operations: In this scenario, when the operations we want to
+     paralellize are fast (math operations, indexing or assigning) the overhead of sending data
+     to cores, and retrieving and joining the results usually is greater than the time of performing
+     the operation.
+
+  1. We are parallelizing processes that involve sending a lot of data to each spawned parallel
+     process. Think for example in working with a global raster at 5km resolution. If we want to
+     parallelize a process involving calculation with this kind of big objects then the overhead of
+     sending the data could be bigger than the process itself.
+  
+  1. Related to the previous, when performing memory intensive processes. Take into account that
+     each spawned parallel process is going to need to use memory as in the sequential process.
+     Parallelizing in the same computing multiplies the memory needed for almost the number of
+     cores used, so is easy to run out of memory if we are not careful.
 
 ## A real example
 
