@@ -465,7 +465,7 @@ In any case, as a rule of thumb, parallelization is not worthy in the following 
 
   1. We are parallelizing processes that involve sending a lot of data to each spawned parallel
      process. Think for example in working with a global raster at 5km resolution. If we want to
-     parallelize a process involving calculation with this kind of big objects then the overhead of
+     parallelize a process involving calculation with this kind of objects then the overhead of
      sending the data could be bigger than the process itself.
   
   1. Related to the previous, when performing memory intensive processes. Take into account that
