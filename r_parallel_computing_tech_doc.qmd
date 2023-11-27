@@ -27,7 +27,6 @@ illustrate the concepts presented here. The topics covered include:
 -   A little introduction to loops and maps in R (`for`, `lapply`, `map`...)\
 -   Ways to use parallelization in your code (`parallel`, `furrr`...)\
 -   How to check if is worth the hassle\
--   Practical examples
 
 ## What is parallel computing?
 
@@ -473,10 +472,3 @@ In any case, as a rule of thumb, parallelization is not worthy in the following 
      each spawned parallel process is going to need to use memory as in the sequential process.
      Parallelizing in the same computing multiplies the memory needed for almost the number of
      cores used, so is easy to run out of memory if we are not careful.
-
-## A real example
-
-Now that we have an idea of what takes to carry on repetitive tasks in parallel, we can see a
-*real life* example:
-
-**TODO**
