@@ -11,8 +11,6 @@ nodes: ''
 authors:
 - vgranda
 - mcaceres
-- rmolowny
-- atovar
 tags:
 - R
 - parallelization
@@ -23,6 +21,6 @@ links:
   url_docs: ''
   url_source: 'https://github.com/emf-creaf/r_parallel_computing_tech_doc'
 requirements: ''
-description: This technical document explain with examples R code parallelization.
+description: This technical document explains with code examples how to parallelize code in R.
 date: '2023-11-20'
-date_lastmod: '2023-11-20'
+date_lastmod: '2023-11-27'
