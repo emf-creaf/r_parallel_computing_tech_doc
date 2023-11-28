@@ -324,7 +324,6 @@ a loop that will run the files in paralell (@lst-foreach):
 #| lst-label: lst-foreach
 #| lst-cap: "Boostrapping model coefficients in iris dataset in parallel with a foreach"
 #| warning: false
-#| collapse: true
 
 # libraries
 library(parallel)
