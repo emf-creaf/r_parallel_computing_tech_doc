@@ -10,9 +10,6 @@ format:
     mermaid-format: svg
     keep-yaml: false
     preserve-yaml: false
-knitr:
-  opts_chunk: 
-    collapse: true
 editor_options: 
   chunk_output_type: console
 ---
