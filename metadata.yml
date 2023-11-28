@@ -4,7 +4,7 @@ emf_type: tech_doc
 emf_public: true
 emf_automatized: true
 emf_reproducible: true
-emf_draft: false
+emf_draft: true
 emf_data_type: emf_data_product
 data_repository: ''
 model_repository: ''
