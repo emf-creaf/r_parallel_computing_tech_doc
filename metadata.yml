@@ -1,6 +1,6 @@
 id: 'r_parallel_computing_tech_doc'
 title: "Parallel computation in R"
-emf_type: tech_doc
+emf_type: workflow
 emf_public: true
 emf_automatized: true
 emf_reproducible: true
@@ -22,6 +22,6 @@ links:
   url_docs: ''
   url_source: 'https://github.com/emf-creaf/r_parallel_computing_tech_doc'
 requirements: ''
-description: This technical document explains with code examples how to parallelize code in R.
+description: This workflow explains with examples how to parallelize code in R.
 date: '2023-11-20'
-date_lastmod: '2023-11-28'
+date_lastmod: '2023-12-04'
