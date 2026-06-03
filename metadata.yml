@@ -23,5 +23,5 @@ links:
   url_source: 'https://github.com/emf-creaf/r_parallel_computing_tech_doc'
 requirements: ''
 description: This workflow explains with examples how to parallelize code in R.
-date: '2023-11-20'
-date_lastmod: '2023-12-04'
+date: "2023-09-04"
+date_lastmod: "2026-06-02"
