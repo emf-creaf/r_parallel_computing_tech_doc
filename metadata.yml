@@ -11,7 +11,7 @@ model_repository: ''
 nodes: ''
 authors:
 - vgranda
-- mcaceres
+- emf
 tags:
 - R
 - parallelization
@@ -24,4 +24,4 @@ links:
 requirements: ''
 description: This workflow explains with examples how to parallelize code in R.
 date: "2023-09-04"
-date_lastmod: "2026-06-02"
+date_lastmod: "2026-06-03"

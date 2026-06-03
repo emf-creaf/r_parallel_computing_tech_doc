@@ -4,7 +4,7 @@ author:
   - vgranda
   - emf
 date: "2023-09-04"
-date_lastmod: "2026-06-02"
+date_lastmod: "2026-06-03"
 format:
   hugo-md:
     mermaid-format: svg
